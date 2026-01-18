@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"sma_event_log/internal/models"
+	"github.com/joshiste/sma_chg_log/internal/models"
 )
 
 const (
@@ -136,7 +136,7 @@ func (c *Client) FetchAllMessages(from, until time.Time, cb func(messages []mode
 		}
 
 		// Filter messages within the time range
-		var filtered []models.Message
+		filtered := make([]models.Message, 0, len(messages))
 		for _, msg := range messages {
 			if !msg.Timestamp.Before(from) && msg.Timestamp.Before(until) {
 				filtered = append(filtered, msg)

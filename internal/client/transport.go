@@ -6,7 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sma_event_log/internal/log"
+
+	"github.com/joshiste/sma_chg_log/internal/log"
 )
 
 // loggingTransport wraps an http.RoundTripper and logs requests/responses at trace level

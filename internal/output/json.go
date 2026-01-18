@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"sma_event_log/internal/models"
+	"github.com/joshiste/sma_chg_log/internal/models"
 )
 
 // JSONMessageFormatter outputs messages as JSON

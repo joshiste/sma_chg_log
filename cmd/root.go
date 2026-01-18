@@ -2,23 +2,27 @@ package cmd
 
 import (
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/joshiste/sma_chg_log/internal/models"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"sma_event_log/internal/log"
+	"github.com/joshiste/sma_chg_log/internal/log"
 )
 
 var cfg = Config{}
 
 type Config struct {
-	URL      string
+	Host     string
 	Username string
 	Password string
 	Format   string
+	Writer   io.Writer
 	From     time.Time
 	Until    time.Time
 }
@@ -26,12 +30,12 @@ type Config struct {
 func (c *Config) Validate() error {
 	var errs []error
 
-	if c.URL == "" {
-		errs = append(errs, errors.New("url is required (use --url flag or SMA_URL environment variable)"))
+	if c.Host == "" {
+		errs = append(errs, errors.New("host is required (use --host flag or SMA_HOST environment variable)"))
 	}
 
-	if !strings.HasPrefix(c.URL, "http://") && !strings.HasPrefix(c.URL, "https://") {
-		c.URL = "https://" + c.URL
+	if !strings.HasPrefix(c.Host, "http://") && !strings.HasPrefix(c.Host, "https://") {
+		c.Host = "https://" + c.Host
 	}
 
 	if c.Username == "" {
@@ -39,7 +43,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Password == "" {
-		errs = append(errs, errors.New("password is required (use SMA_PASSWORD environment variable)"))
+		errs = append(errs, errors.New("password is required (use --password flag or SMA_PASSWORD environment variable)"))
 	}
 
 	if month := viper.GetString("month"); month != "" {
@@ -51,29 +55,40 @@ func (c *Config) Validate() error {
 			c.Until = parsed.AddDate(0, 1, 0).UTC()
 		}
 	} else {
-		c.From = time.Unix(0, 0).UTC()
-		c.Until = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
+		c.From = models.TimeMin
+		c.Until = models.TimeMax
+	}
+
+	if output := viper.GetString("output"); output == "-" {
+		c.Writer = os.Stdout
+	} else if f, err := os.Create(output); err == nil {
+		c.Writer = f
+	} else {
+		errs = append(errs, err)
 	}
 
 	return errors.Join(errs...)
 }
 
 var rootCmd = &cobra.Command{
-	Use:               "sma_event_log",
-	Short:             "Fetch event messages from ennexos device",
-	Long:              "A tool to fetch customer messages from SMA device API and output specific events",
-	PersistentPreRunE: persistentPreRunE,
+	Use:                "sma_chg_log",
+	Short:              "Fetch event messages from ennexos device",
+	Long:               "A tool to fetch customer messages from SMA device API and output specific events",
+	PersistentPreRunE:  persistentPreRunE,
+	PersistentPostRunE: persistentPostRunE,
 }
 
 func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global persistent flags (available to all subcommands)
-	rootCmd.PersistentFlags().String("url", "", "Base URL of the SMA device API")
-	rootCmd.PersistentFlags().String("username", "", "Username for authentication")
-	rootCmd.PersistentFlags().String("log-level", "info", "Log level: trace, debug, info, warn, error")
-	rootCmd.PersistentFlags().String("month", "", "Filter by month (format: YYYY-MM)")
-	rootCmd.PersistentFlags().String("format", "json", "Output format: json, csv, or pdf")
+	rootCmd.PersistentFlags().StringP("host", "H", "", "Hostname of the SMA device")
+	rootCmd.PersistentFlags().StringP("username", "u", "", "Username for authentication")
+	rootCmd.PersistentFlags().StringP("password", "p", "", "Password for authentication")
+	rootCmd.PersistentFlags().StringP("log-level", "l", "info", "Log level: trace, debug, info, warn, error")
+	rootCmd.PersistentFlags().StringP("month", "m", "", "Filter by month (format: YYYY-MM)")
+	rootCmd.PersistentFlags().StringP("format", "f", "json", "Output format: json, csv, or pdf")
+	rootCmd.PersistentFlags().StringP("output", "o", "-", "Output file path (use '-' for stdout)")
 
 	must(viper.BindPFlags(rootCmd.PersistentFlags()))
 }
@@ -102,6 +117,13 @@ func persistentPreRunE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	return nil
+}
+
+func persistentPostRunE(cmd *cobra.Command, args []string) error {
+	if f, ok := cfg.Writer.(io.Closer); ok && f != os.Stdout && f != os.Stderr {
+		_ = f.Close()
+	}
 	return nil
 }
 

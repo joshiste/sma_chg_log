@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"sma_event_log/internal/models"
+	"github.com/joshiste/sma_chg_log/internal/models"
 )
 
 // CSVFormatter outputs charging session as CSV

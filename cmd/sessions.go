@@ -3,31 +3,46 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
+	"log/slog"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"sma_event_log/internal/client"
-	"sma_event_log/internal/models"
-	"sma_event_log/internal/output"
+	"github.com/joshiste/sma_chg_log/internal/client"
+	"github.com/joshiste/sma_chg_log/internal/models"
+	"github.com/joshiste/sma_chg_log/internal/output"
 )
+
+var mapAuthenticationRaw []string
 
 var sessionsCmd = &cobra.Command{
 	Use:   "sessions",
-	Short: "Output charging sessions",
+	Short: "Writer charging sessions",
 	Long:  "Fetch charging events and output paired charging sessions in JSON, CSV, or PDF format",
 	RunE:  runSessions,
 }
 
 func init() {
+	sessionsCmd.Flags().StringArrayVarP(&mapAuthenticationRaw, "map-authentication", "a", nil, "Map authentication values (format: old:new, can be specified multiple times)")
 	must(viper.BindPFlags(sessionsCmd.Flags()))
 
 	rootCmd.AddCommand(sessionsCmd)
 
-	// Set sessions as the default command
 	rootCmd.RunE = runSessions
+}
+
+func parseMapAuthentication(raw []string) map[string]string {
+	result := make(map[string]string)
+	for _, entry := range raw {
+		parts := strings.SplitN(entry, ":", 2)
+		if len(parts) == 2 {
+			result[parts[0]] = parts[1]
+		}
+	}
+	return result
 }
 
 func runSessions(cmd *cobra.Command, args []string) error {
@@ -35,12 +50,10 @@ func runSessions(cmd *cobra.Command, args []string) error {
 		return errors.New("format must be 'json', 'csv', or 'pdf'")
 	}
 
-	apiClient := client.New(cfg.URL, cfg.Username, cfg.Password)
-	formatter := output.NewSessionFormatter(cfg.Format, os.Stdout)
+	authMap := parseMapAuthentication(mapAuthenticationRaw)
+	slog.Debug("Authentication mapping", "map", authMap)
 
-	if err := formatter.WriteHeader(); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
-	}
+	apiClient := client.New(cfg.Host, cfg.Username, cfg.Password)
 
 	// Collect all messages for pairing
 	var allMessages []models.Message
@@ -53,7 +66,29 @@ func runSessions(cmd *cobra.Command, args []string) error {
 	}
 
 	// Pair messages into sessions and output
-	sessions := pairChargingSessions(allMessages)
+	sessions := pairChargingSessions(allMessages, authMap)
+
+	// Calculate date range from sessions if not explicitly set
+	opts := output.Options{
+		From:  cfg.From,
+		Until: cfg.Until,
+	}
+	if len(sessions) > 0 && opts.From == models.TimeMin {
+		opts.From = toDate(sessions[len(sessions)-1].End)
+	}
+	if len(sessions) > 0 && opts.Until == models.TimeMax {
+		opts.Until = toDate(sessions[0].End).AddDate(0, 0, 1)
+	}
+	if time.Now().Before(opts.Until) {
+		opts.Until = toDate(time.Now()).AddDate(0, 0, 1)
+	}
+
+	formatter := output.NewSessionFormatterWithOptions(cfg.Format, cfg.Writer, opts)
+
+	if err := formatter.WriteHeader(); err != nil {
+		return fmt.Errorf("failed to write header: %w", err)
+	}
+
 	for _, session := range sessions {
 		if err := formatter.WriteSession(session); err != nil {
 			return fmt.Errorf("failed to write session: %w", err)
@@ -63,9 +98,13 @@ func runSessions(cmd *cobra.Command, args []string) error {
 	return formatter.Flush()
 }
 
+func toDate(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
 // pairChargingSessions pairs charging stopped events with their preceding started events
 // Messages are ordered newest to oldest, so a stopped event at index i may pair with started at i+1
-func pairChargingSessions(messages []models.Message) []models.ChargingSession {
+func pairChargingSessions(messages []models.Message, authMap map[string]string) []models.ChargingSession {
 	var sessions []models.ChargingSession
 
 	for i := 0; i < len(messages); i++ {
@@ -77,18 +116,23 @@ func pairChargingSessions(messages []models.Message) []models.ChargingSession {
 		}
 
 		session := models.ChargingSession{
-			ChargerName:    msg.DeviceName,
-			Consumption:    findConsumption(msg.Arguments),
-			Authentication: "",
-			End:            msg.Timestamp,
+			ChargerName: msg.DeviceName,
+			Consumption: findConsumption(msg.Arguments),
+			End:         msg.Timestamp,
 		}
 
 		// Look for preceding charging started event (next in array since newest first)
 		if i+1 < len(messages) && messages[i+1].MessageID == messageIDChargingStarted {
 			startMsg := messages[i+1]
-			session.Authentication = findAuthentication(startMsg.Arguments)
+			auth := findAuthentication(startMsg.Arguments)
+			session.Authentication = auth
 			session.Start = startMsg.Timestamp
 			i++ // Skip the start message since it's now paired
+		}
+
+		// Apply authorization mapping if configured
+		if mapped, ok := authMap[session.Authentication]; ok {
+			session.Authentication = mapped
 		}
 
 		sessions = append(sessions, session)

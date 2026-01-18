@@ -2,6 +2,11 @@ package models
 
 import "time"
 
+var (
+	TimeMin = time.Unix(0, 0).UTC()
+	TimeMax = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
+)
+
 // ChargingSession represents a paired charging start/stop event
 type ChargingSession struct {
 	ChargerName    string    `json:"chargerName"`

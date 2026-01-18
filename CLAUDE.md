@@ -1,4 +1,4 @@
-# SMA Event Log Tool
+# SMA EV Charging Log
 
 ## Project Overview
 
@@ -8,8 +8,13 @@ A Go CLI tool that fetches customer messages from an SMA device API and outputs 
 
 ```
 ├── main.go                      # Entry point
+├── Dockerfile                   # Docker image definition
+├── .goreleaser.yaml             # GoReleaser configuration
 ├── cmd/
-│   └── root.go                  # Cobra CLI setup and configuration
+│   ├── root.go                  # Cobra CLI setup and configuration
+│   ├── sessions.go              # Sessions command (default, paired sessions)
+│   ├── events.go                # Events command (raw JSON messages)
+│   └── utils.go                 # Shared utilities (message filtering)
 └── internal/
     ├── client/
     │   ├── client.go            # HTTP client with auto 401 retry
@@ -18,11 +23,13 @@ A Go CLI tool that fetches customer messages from an SMA device API and outputs 
     ├── log/
     │   └── log.go               # Logging configuration
     ├── models/
-    │   └── messages.go          # Request/response structs
+    │   ├── messages.go          # API request/response structs
+    │   └── session.go           # Charging session struct
     └── output/
         ├── formatter.go         # Formatter interface
         ├── json.go              # JSON output formatter
-        └── csv.go               # CSV output formatter
+        ├── csv.go               # CSV output formatter
+        └── pdf.go               # PDF output formatter
 ```
 
 ## Libraries
@@ -34,18 +41,44 @@ A Go CLI tool that fetches customer messages from an SMA device API and outputs 
 - **CSV**: `encoding/csv` (standard library)
 - **PDF**: `github.com/go-pdf/fpdf`
 
+## Commands
+
+### sessions (default)
+
+Fetches charging events and outputs paired charging sessions. This is the default command (runs when no subcommand is specified via `rootCmd.RunE = runSessions`).
+
+**Command-specific flags:**
+- `--map-authentication` - Map authentication values (format: `old:new`, can be specified multiple times)
+
+**Supported formats:** json, csv, pdf
+
+### events
+
+Fetches and outputs raw charging event messages (start/stop) without pairing them into sessions.
+
+**Supported formats:** json only (returns error for other formats)
+
 ## Configuration
 
 All parameters can be set via command line flags or environment variables. Command line flags take precedence.
 
-| Parameter  | Flag          | Environment Variable | Required | Notes                                              |
-|------------|---------------|----------------------|----------|----------------------------------------------------|
-| URL        | `--url`       | `SMA_URL`            | Yes      | Base URL of the SMA device API (defaults to https) |
-| Username   | `--username`  | `SMA_USERNAME`       | Yes      | Authentication username                            |
-| Password   | -             | `SMA_PASSWORD`       | Yes      | Environment variable only                          |
-| Format     | `--format`    | `SMA_FORMAT`         | No       | Output format: json, csv, or pdf (default: json)   |
-| Month      | `--month`     | `SMA_MONTH`          | No       | Filter by month (format: YYYY-MM)                  |
-| Log Level  | `--log-level` | `SMA_LOG_LEVEL`      | No       | trace, debug, info, warn, error (default: info)    |
+### Global Flags (defined in root.go)
+
+| Parameter  | Flag              | Environment Variable | Required | Notes                                              |
+|------------|-------------------|----------------------|----------|---------------------------------------------------|
+| Host       | `-H, --host`      | `SMA_HOST`           | Yes      | Hostname of the SMA device (defaults to https)     |
+| Username   | `-u, --username`  | `SMA_USERNAME`       | Yes      | Authentication username                            |
+| Password   | `-p, --password`  | `SMA_PASSWORD`       | Yes      | Authentication password                            |
+| Format     | `-f, --format`    | `SMA_FORMAT`         | No       | Output format: json, csv, or pdf (default: json)   |
+| Output     | `-o, --output`    | `SMA_OUTPUT`         | No       | Output file path (default: `-` for stdout)         |
+| Month      | `-m, --month`     | `SMA_MONTH`          | No       | Filter by month (format: YYYY-MM)                  |
+| Log Level  | `-l, --log-level` | `SMA_LOG_LEVEL`      | No       | trace, debug, info, warn, error (default: info)    |
+
+### Sessions Command Flags (defined in sessions.go)
+
+| Parameter          | Flag                       | Notes                                              |
+|--------------------|----------------------------|----------------------------------------------------|
+| Map Authentication | `-a, --map-authentication` | Map auth values (format: `old:new`, repeatable)    |
 
 ## API Endpoints
 
@@ -99,22 +132,26 @@ All parameters can be set via command line flags or environment variables. Comma
 
 ```bash
 # Build
-go build -o sma_event_log .
+go build -o sma_chg_log .
 
-# Run with JSON output (default)
-./sma_event_log --url device.local --username admin
+# Run sessions command (default) with JSON output
+./sma_chg_log --host device.local --username admin --password secret
 
-# Run with CSV output
-./sma_event_log --url device.local --username admin --format csv
+# Run sessions with CSV output to file
+./sma_chg_log --host device.local --username admin --password secret --format csv -o sessions.csv
 
-# Run with PDF output (redirect to file)
-./sma_event_log --url device.local --username admin --format pdf > report.pdf
+# Run sessions with PDF output
+./sma_chg_log --host device.local --username admin --password secret --format pdf -o report.pdf
 
-# Run with month filter
-./sma_event_log --url device.local --username admin --format csv --month 2026-01
+# Run sessions with month filter and authentication mapping
+./sma_chg_log --host device.local --username admin --password secret --format csv --month 2026-01 \
+  --map-authentication "old-id:John Doe" --map-authentication ":Unknown"
+
+# Run events command (raw JSON messages)
+./sma_chg_log events --host device.local --username admin --password secret
 
 # Run with trace logging
-./sma_event_log --url device.local --username admin --log-level trace
+./sma_chg_log --host device.local --username admin --password secret --log-level trace
 ```
 
 ## Development Guidelines

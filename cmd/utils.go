@@ -1,6 +1,8 @@
 package cmd
 
-import "sma_event_log/internal/models"
+import (
+	"github.com/joshiste/sma_chg_log/internal/models"
+)
 
 const (
 	messageIDChargingCompleted = 9813

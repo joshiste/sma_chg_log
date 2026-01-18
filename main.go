@@ -1,6 +1,6 @@
 package main
 
-import "sma_event_log/cmd"
+import "github.com/joshiste/sma_chg_log/cmd"
 
 func main() {
 	cmd.Execute()

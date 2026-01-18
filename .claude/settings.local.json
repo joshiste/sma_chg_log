@@ -8,7 +8,7 @@
       "Bash(golangci-lint run:*)",
       "Bash(golangci-lint:*)",
       "Bash(go get:*)",
-      "Bash(./sma_event_log:*)",
+      "Bash(./sma_chg_log:*)",
       "Bash(go run:*)"
     ]
   }

@@ -3,12 +3,13 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"sma_event_log/internal/models"
+	"github.com/joshiste/sma_chg_log/internal/models"
 )
 
 // fetchToken retrieves a new bearer token from the token endpoint
@@ -33,7 +34,9 @@ func (c *Client) fetchToken() error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("token request failed with status: %d", resp.StatusCode)
