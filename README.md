@@ -1,6 +1,6 @@
 # SMA EV Charging Log
 
-A CLI tool to fetch and export EV charging events/sessions from your SMA EV Charger with ennexOS to JSON, CSV or PDF.
+A CLI tool to export EV charging sessions/events from your SMA EV Charger with ennexOS to JSON, CSV or PDF.
 
 ## Notice
 
@@ -10,8 +10,8 @@ The SMA, SMA ennexOS names and logos are trademarks of SMA Solar Technology AG.
 
 ## Features
 
-- Fetches charging events from SMA EV Charger API and pairs charging start/stop events into sessions
-- Exports all charging sessions to JSON, CSV, or PDF
+- Pulls charging events from SMA EV Charger API and pairs charging start/stop events into sessions
+- Exports charging sessions to JSON, CSV, or PDF
 - Filter by month
 - Map authentication IDs to user-friendly names
 
@@ -36,7 +36,7 @@ go install github.com/joshiste/sma_chg_log@latest
 ## Usage
 
 ```bash
-# PDF report with all charging sessions for December 2025
+# PDF report with all charging sessions for January 2026
 sma_chg_log --host device.local --username admin --password yourpassword --format pdf --month 2026-01 --output report-2026-01.pdf
 
 # PDF report with mapping the authentication 
@@ -80,11 +80,9 @@ sma_chg_log events --host device.local --username admin --password secret
 
 **Supported formats:** json only
 
-## Configuration
+## Global Options
 
 All parameters can be set via command line flags or environment variables. Flags take precedence.
-
-### Global Flags
 
 | Parameter | Flag              | Environment Variable | Required | Description                             |
 |-----------|-------------------|----------------------|----------|-----------------------------------------|
